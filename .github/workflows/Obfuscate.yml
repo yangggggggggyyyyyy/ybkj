@@ -5,8 +5,8 @@ on:
     branches:
       - main
   schedule:
-        # Runs everyday at 1:00 AM
-        - cron: "0 1 * * *"
+    # 每天凌晨 1 点运行
+    - cron: "0 1 * * *"
 
 permissions:
   contents: write
@@ -18,40 +18,49 @@ jobs:
     steps:
       - name: Check out the code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 确保拉取完整提交历史
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "latest"
+          node-version: "20"  # 固定版本，避免兼容性问题
+          cache: "npm"  # 启用 npm 缓存加速安装
 
-      - name: Install dependencies
+      - name: Install javascript-obfuscator
+        run: npm install -g javascript-obfuscator@latest
+
+      - name: Download unobfuscated worker
         run: |
-          npm install -g javascript-obfuscator
+          curl -sSLo origin.js "https://raw.githubusercontent.com/bia-pain-bache/BPB-Worker-Panel/main/build/unobfuscated-worker.js"
+          # 验证文件是否下载成功
+          if [ ! -f origin.js ]; then
+            echo "❌ Failed to download unobfuscated-worker.js"
+            exit 1
+          fi
 
-      - name: Clone BPB workjs
-        run: |
-          wget -O origin.js https://raw.githubusercontent.com/bia-pain-bache/BPB-Worker-Panel/refs/heads/main/build/unobfuscated-worker.js
-
-      - name: Obfuscate BPB worker js
+      - name: Obfuscate code
         run: |
           javascript-obfuscator origin.js --output _worker.js \
-          --compact true \
-          --control-flow-flattening true \
-          --control-flow-flattening-threshold 1 \
-          --dead-code-injection true \
-          --dead-code-injection-threshold 1 \
-          --identifier-names-generator hexadecimal \
-          --rename-globals true \
-          --string-array true \
-          --string-array-encoding 'rc4' \
-          --string-array-threshold 1 \
-          --transform-object-keys true \
-          --unicode-escape-sequence true
+            --compact true \
+            --control-flow-flattening true \
+            --control-flow-flattening-threshold 0.75 \  # 降低阈值避免性能问题
+            --dead-code-injection true \
+            --dead-code-injection-threshold 0.4 \  # 降低死代码注入密度
+            --identifier-names-generator hexadecimal \
+            --rename-globals true \
+            --string-array true \
+            --string-array-encoding rc4 \
+            --string-array-threshold 0.75 \  # 平衡混淆强度与性能
+            --transform-object-keys true \
+            --unicode-escape-sequence true
 
       - name: Commit changes
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           branch: main
-          commit_message: ':arrow_up: update latest bpb panel'
-          commit_author: 'github-actions[bot] <github-actions[bot]@users.noreply.github.com>'
-          push_options: '--set-upstream'
+          commit_message: "🔧 chore: update obfuscated worker"
+          commit_user_name: "github-actions[bot]"
+          commit_user_email: "github-actions[bot]@users.noreply.github.com"
+          # 仅当 _worker.js 有变化时才提交
+          file_pattern: "_worker.js"
