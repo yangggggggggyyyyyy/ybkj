@@ -5,7 +5,6 @@ on:
     branches:
       - main
   schedule:
-    # 每天凌晨 1 点运行
     - cron: "0 1 * * *"
 
 permissions:
@@ -18,23 +17,19 @@ jobs:
     steps:
       - name: Check out the code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # 确保拉取完整提交历史
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"  # 固定版本，避免兼容性问题
-          cache: "npm"  # 启用 npm 缓存加速安装
+          node-version: "20"
+          # 不再自动缓存（因无锁文件）
 
       - name: Install javascript-obfuscator
         run: npm install -g javascript-obfuscator@latest
 
       - name: Download unobfuscated worker
         run: |
-          curl -sSLo origin.js "https://raw.githubusercontent.com/bia-pain-bache/BPB-Worker-Panel/main/build/unobfuscated-worker.js"
-          # 验证文件是否下载成功
-          if [ ! -f origin.js ]; then
+          if ! curl -sSLo origin.js "https://raw.githubusercontent.com/bia-pain-bache/BPB-Worker-Panel/main/build/unobfuscated-worker.js"; then
             echo "❌ Failed to download unobfuscated-worker.js"
             exit 1
           fi
@@ -44,14 +39,14 @@ jobs:
           javascript-obfuscator origin.js --output _worker.js \
             --compact true \
             --control-flow-flattening true \
-            --control-flow-flattening-threshold 0.75 \  # 降低阈值避免性能问题
+            --control-flow-flattening-threshold 0.75 \
             --dead-code-injection true \
-            --dead-code-injection-threshold 0.4 \  # 降低死代码注入密度
+            --dead-code-injection-threshold 0.5 \
             --identifier-names-generator hexadecimal \
             --rename-globals true \
             --string-array true \
             --string-array-encoding rc4 \
-            --string-array-threshold 0.75 \  # 平衡混淆强度与性能
+            --string-array-threshold 0.75 \
             --transform-object-keys true \
             --unicode-escape-sequence true
 
@@ -60,7 +55,4 @@ jobs:
         with:
           branch: main
           commit_message: "🔧 chore: update obfuscated worker"
-          commit_user_name: "github-actions[bot]"
-          commit_user_email: "github-actions[bot]@users.noreply.github.com"
-          # 仅当 _worker.js 有变化时才提交
           file_pattern: "_worker.js"
